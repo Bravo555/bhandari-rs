@@ -30,6 +30,8 @@ fn main() -> anyhow::Result<()> {
     let edges =
         load_edges_from_file(&args.file, args.undirected).context("loading edges from file")?;
 
+    println!("number of links: {}", edges.len());
+
     let result =
         bhandari(&edges, &args.start, &args.to, args.k).context("getting disjoint paths")?;
 
