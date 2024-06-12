@@ -1,6 +1,10 @@
 use clap::{arg, command, Parser};
 use pathfinding::prelude::*;
-use std::{collections::HashMap, fs, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    sync::Arc,
+};
 
 use anyhow::Context;
 
@@ -31,6 +35,13 @@ fn main() -> anyhow::Result<()> {
         load_edges_from_file(&args.file, args.undirected).context("loading edges from file")?;
 
     println!("number of links: {}", edges.len());
+
+    let mut nodes: HashSet<Arc<str>> = HashSet::new();
+    for link in &edges {
+        nodes.insert(Arc::clone(&link.from));
+        nodes.insert(Arc::clone(&link.to));
+    }
+    println!("number of nodes: {}", nodes.len());
 
     let result =
         bhandari(&edges, &args.start, &args.to, args.k).context("getting disjoint paths")?;
