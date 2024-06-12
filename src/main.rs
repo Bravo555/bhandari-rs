@@ -1,6 +1,6 @@
 use clap::{arg, command, Parser};
 use pathfinding::prelude::*;
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, sync::Arc};
 
 use anyhow::Context;
 
@@ -11,37 +11,74 @@ struct Args {
     file: String,
 
     #[arg()]
-    start: u32,
+    start: String,
 
     #[arg()]
-    to: u32,
+    to: String,
 
     #[arg()]
     k: usize,
+
+    /// Treat links as undirected, false by default
+    #[arg(short, long)]
+    undirected: bool,
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let edges: anyhow::Result<Vec<_>> = fs::read_to_string(args.file)?
-        .lines()
-        .filter(|line| !line.is_empty() && !line.starts_with("//"))
-        .map(parse_edge)
-        .collect();
-    let edges = edges?;
 
-    let result = bhandari(&edges, args.start, args.to, args.k).context("getting disjoint paths")?;
+    let edges =
+        load_edges_from_file(&args.file, args.undirected).context("loading edges from file")?;
+
+    let result =
+        bhandari(&edges, &args.start, &args.to, args.k).context("getting disjoint paths")?;
 
     println!("{result:?}");
 
     Ok(())
 }
 
-fn bhandari(_graph: &[Edge], start: u32, end: u32, k: usize) -> anyhow::Result<Vec<Vec<u32>>> {
+fn bhandari(_graph: &[Edge], start: &str, end: &str, k: usize) -> anyhow::Result<Vec<Vec<String>>> {
+    struct Edge {
+        from: u32,
+        to: u32,
+        weight: i32,
+    }
+
+    // convert string nodes to numbers
+    let mut nodes = _graph
+        .iter()
+        .map(|link| link.from.clone())
+        .chain(_graph.iter().map(|link| link.to.clone()))
+        .collect::<Vec<_>>();
+    nodes.sort();
+    nodes.dedup();
+
+    let nodes_names_to_indices: HashMap<String, u32> = HashMap::from_iter(
+        nodes
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.to_string(), u32::try_from(i).unwrap())),
+    );
+    let nodes_indices_to_names = nodes;
+
+    let graph = _graph
+        .iter()
+        .map(|edge| Edge {
+            from: *nodes_names_to_indices.get(&*edge.from).unwrap(),
+            to: *nodes_names_to_indices.get(&*edge.to).unwrap(),
+            weight: edge.weight,
+        })
+        .collect::<Vec<_>>();
+
+    let start = *nodes_names_to_indices.get(start).unwrap();
+    let end = *nodes_names_to_indices.get(end).unwrap();
+
     // dijkstra calls a function at each step to get list of next nodes it goes to, so transform our
     // edge list to lambda that returns `to` nodes for a given node
     let shortest_path = {
         let successors = |current_node: &u32| {
-            _graph
+            graph
                 .iter()
                 .filter(|edge| edge.from == *current_node)
                 .map(|&Edge { to, weight, .. }| (to, weight))
@@ -64,11 +101,8 @@ fn bhandari(_graph: &[Edge], start: u32, end: u32, k: usize) -> anyhow::Result<V
         // we use link-disjoint, so skip
 
         // Replace each link of all P_x where x < i with a reverse link of inverted link weight in the original graph
-        let mut graph: HashMap<(u32, u32), i32> = HashMap::from_iter(
-            _graph
-                .iter()
-                .map(|edge| ((edge.from, edge.to), edge.weight)),
-        );
+        let mut graph: HashMap<(u32, u32), i32> =
+            HashMap::from_iter(graph.iter().map(|edge| ((edge.from, edge.to), edge.weight)));
 
         for path in &paths {
             for link in path.windows(2) {
@@ -147,24 +181,57 @@ fn bhandari(_graph: &[Edge], start: u32, end: u32, k: usize) -> anyhow::Result<V
             .collect::<Vec<_>>();
     }
 
+    // restore original node names
+    let paths: Vec<Vec<String>> = paths
+        .into_iter()
+        .map(|path| {
+            path.into_iter()
+                .map(|node| nodes_indices_to_names[node as usize].to_string())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
     Ok(paths)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Edge {
-    from: u32,
-    to: u32,
+    from: Arc<str>,
+    to: Arc<str>,
     weight: i32,
 }
 
-fn parse_edge(line: &str) -> anyhow::Result<Edge> {
+fn load_edges_from_file(file: &str, undirected: bool) -> anyhow::Result<Vec<Edge>> {
+    let edges = fs::read_to_string(file)?
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with("//"))
+        .flat_map(|line| parse_edge(line, undirected).unwrap())
+        .collect();
+
+    Ok(edges)
+}
+
+fn parse_edge(line: &str, undirected: bool) -> anyhow::Result<Vec<Edge>> {
     let mut parts = line.split_whitespace();
 
-    let from = parts.next().context("no starting node")?.parse()?;
-
+    let from: Arc<str> = parts.next().context("no starting node")?.into();
     let weight = parts.next().context("no weight")?.parse()?;
+    let to: Arc<str> = parts.next().context("no finish node")?.into();
 
-    let to = parts.next().context("no finish node")?.parse()?;
-
-    Ok(Edge { from, to, weight })
+    Ok(if undirected {
+        vec![
+            Edge {
+                from: from.clone(),
+                to: to.clone(),
+                weight,
+            },
+            Edge {
+                from: to,
+                to: from,
+                weight,
+            },
+        ]
+    } else {
+        vec![Edge { from, to, weight }]
+    })
 }
