@@ -1,0 +1,33 @@
+A 1 B
+A 1 E
+A 7 G
+
+B 1 A
+B 1 C
+B 1 E
+B 1 F
+
+C 1 B
+C 1 D
+C 1 G
+
+D 1 C
+D 1 F
+D 1 Z
+
+E 1 A
+E 1 B
+E 3 F
+
+F 1 B
+F 1 D
+F 3 E
+F 4 Z
+
+G 7 A
+G 1 C
+G 2 Z
+
+Z 1 D
+Z 4 F
+Z 2 G
