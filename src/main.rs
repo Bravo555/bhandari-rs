@@ -1,8 +1,8 @@
+use bhandari_rs::Edge;
 use clap::{arg, command, Parser};
 use pathfinding::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     sync::Arc,
 };
 
@@ -31,8 +31,8 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let edges =
-        load_edges_from_file(&args.file, args.undirected).context("loading edges from file")?;
+    let edges = bhandari_rs::load_edges_from_file(&args.file, args.undirected)
+        .context("loading edges from file")?;
 
     println!("number of links: {}", edges.len());
 
@@ -205,46 +205,4 @@ fn bhandari(_graph: &[Edge], start: &str, end: &str, k: usize) -> anyhow::Result
         .collect();
 
     Ok(paths)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Edge {
-    from: Arc<str>,
-    to: Arc<str>,
-    weight: i32,
-}
-
-fn load_edges_from_file(file: &str, undirected: bool) -> anyhow::Result<Vec<Edge>> {
-    let edges = fs::read_to_string(file)?
-        .lines()
-        .filter(|line| !line.is_empty() && !line.starts_with("//"))
-        .flat_map(|line| parse_edge(line, undirected).unwrap())
-        .collect();
-
-    Ok(edges)
-}
-
-fn parse_edge(line: &str, undirected: bool) -> anyhow::Result<Vec<Edge>> {
-    let mut parts = line.split_whitespace();
-
-    let from: Arc<str> = parts.next().context("no starting node")?.into();
-    let weight = parts.next().context("no weight")?.parse()?;
-    let to: Arc<str> = parts.next().context("no finish node")?.into();
-
-    Ok(if undirected {
-        vec![
-            Edge {
-                from: from.clone(),
-                to: to.clone(),
-                weight,
-            },
-            Edge {
-                from: to,
-                to: from,
-                weight,
-            },
-        ]
-    } else {
-        vec![Edge { from, to, weight }]
-    })
 }
