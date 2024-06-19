@@ -43,8 +43,15 @@ fn main() -> anyhow::Result<()> {
     }
     println!("number of nodes: {}", nodes.len());
 
+    let start = std::time::Instant::now();
+
     let result =
         bhandari(&edges, &args.start, &args.to, args.k).context("getting disjoint paths")?;
+
+    let end = std::time::Instant::now();
+    let duration = end.duration_since(start);
+
+    println!("czas algorytmu: {duration:?}");
 
     println!("{result:?}");
 
